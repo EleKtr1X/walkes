@@ -31,6 +31,7 @@
 		"prettier-plugin-tailwindcss": "^0.7.2",
 		"svelte": "^5.51.0",
 		"svelte-check": "^4.4.2",
+		"svelte-geolocation": "^1.0.0",
 		"tailwindcss": "^4.1.18",
 		"typescript": "^5.9.3",
 		"typescript-eslint": "^8.54.0",
@@ -39,6 +40,7 @@
 	"dependencies": {
 		"@capacitor/android": "^8.2.0",
 		"@capacitor/core": "^8.2.0",
+		"@types/mapbox-gl": "^3.4.1",
 		"mapbox-gl": "^3.19.1"
 	}
 }
