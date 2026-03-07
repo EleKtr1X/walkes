@@ -2,3 +2,4 @@
 .env
 CLAUDE.MD
 seed.py
+__pycache__
