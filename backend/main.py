@@ -18,6 +18,26 @@ supabase = create_client(url, key)
 app = FastAPI()
 
 
+SEVERITY_WEIGHTS = {"low": 1, "medium": 2, "high": 3}
+
+
+def recalculate_risk_score(segment_id: UUID):
+    reports = (
+        supabase.table("reports")
+        .select("severity")
+        .eq("segment_id", str(segment_id))
+        .execute()
+    ).data
+
+    if not reports:
+        return
+
+    scores = [SEVERITY_WEIGHTS.get(r["severity"], 1) for r in reports]
+    risk_score = round(sum(scores) / (len(scores) * 3), 4)  # normalised 0–1
+
+    supabase.table("segments").update({"risk_score": risk_score}).eq("id", str(segment_id)).execute()
+
+
 @app.post("/report")
 async def submit_report(
     condition: str = Form(...),
@@ -26,12 +46,12 @@ async def submit_report(
     lng: float = Form(...),
     segment_id: Optional[UUID] = Form(None),
 ):
-    
-    response = (
-        supabase.table("reports")
-        .insert({"segment_id": segment_id, "condition": condition, "severity": severity, "lat": lat, "lng": lng})
-        .execute()
-    )
+    supabase.table("reports").insert(
+        {"segment_id": str(segment_id) if segment_id else None, "condition": condition, "severity": severity, "lat": lat, "lng": lng}
+    ).execute()
+
+    if segment_id:
+        recalculate_risk_score(segment_id)
 
 
 @app.get("/segments")
