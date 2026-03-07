@@ -1,52 +1,60 @@
-import os
-from typing import List
-
-from google import genai
-from google.genai import types
-from pydantic import BaseModel
-
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, Form, File, UploadFile
+from typing import Optional
+from uuid import UUID
 from dotenv import load_dotenv
+from seed import seed
+
+import os
+from supabase import create_client, Client
 
 load_dotenv()
 
+url = os.environ.get("SUPABASE_URL")
+key = os.environ.get("SUPABASE_KEY")
 
-client = genai.Client(api_key=os.environ["GEMINI_SECRET"])
+supabase = create_client(url, key)
+
+
 app = FastAPI()
 
 
-class GroceryItem(BaseModel):
-    name: str
-    price: float | None
-    quantity: float | None
-    query: str
-
-
-class GroceryList(BaseModel):
-    items: List[GroceryItem]
-
-
-@app.post("/scan")
-async def scan_grocery_image(image: UploadFile = File(...)):
-    if not image.content_type or not image.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="File must be an image")
-
-    contents = await image.read()
-
-    response = client.models.generate_content(
-        model="gemini-3-flash-preview",
-        contents=[
-            types.Part.from_bytes(data=contents, mime_type=image.content_type),
-            "List all the grocery items visible in this image, including their price and quantity if shown. For each item also provide a query field: the simplest generic 1-2 word search term for that item (e.g. 'Natrel 3.25% Milk 4L' → 'milk', 'Wonder White Sandwich Bread' → 'bread').",
-        ],
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=GroceryList,
-        ),
+@app.post("/report")
+async def submit_report(
+    condition: str = Form(...),
+    severity: str = Form(...),
+    lat: float = Form(...),
+    lng: float = Form(...),
+    segment_id: Optional[UUID] = Form(None),
+):
+    
+    response = (
+        supabase.table("reports")
+        .insert({"segment_id": segment_id, "condition": condition, "severity": severity, "lat": lat, "lng": lng})
+        .execute()
     )
 
-    items = [item.model_dump() for item in response.parsed.items]
+
+@app.get("/segments")
+async def get_segments():
+    response = supabase.rpc("get_segments_geojson").execute()
+    features = []
+    for row in response.data:
+        new = {
+            "type": "Feature",
+            "geometry": row["geometry"],
+            "properties": {
+                "id": row["id"],
+                "risk_score": row["risk_score"],
+                "surface_type": row["surface_type"],
+            },
+        }
+
+        features.append(new)
+
+    return {"type": "FeatureCollection", "features": features}
 
 
-    return {"items": items}
-
+@app.post("/admin/seed")
+async def admin_seed():
+    count = seed()
+    return {"inserted": count}

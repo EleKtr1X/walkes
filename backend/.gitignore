@@ -1,4 +1,4 @@
-.grocery-backend
+.snow-app-backend
 .env
-example_receipt1.jpg
-example_receipt2.jpg
+CLAUDE.MD
+seed.py

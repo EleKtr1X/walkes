@@ -1,6 +1,6 @@
 fastapi
 uvicorn[standard]
+supabase
+python-dotenv
 python-multipart
-dotenv
-google-genai
 requests
