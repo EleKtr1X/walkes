@@ -2,9 +2,12 @@ from fastapi import FastAPI, Form
 from uuid import UUID
 from dotenv import load_dotenv
 from seed import seed
+from pydantic import BaseModel
 
 import os
 from supabase import create_client, Client
+
+from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
 
@@ -15,6 +18,13 @@ supabase = create_client(url, key)
 
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 SEVERITY_WEIGHTS = {"low": 1, "medium": 2, "high": 3}
@@ -36,20 +46,20 @@ def recalculate_risk_score(segment_id: UUID):
 
     supabase.table("segments").update({"risk_score": risk_score}).eq("id", str(segment_id)).execute()
 
+class ReportRequest(BaseModel):
+    condition: str
+    severity: str
+    lat: float
+    lng: float
 
 @app.post("/report")
-async def submit_report(
-    condition: str = Form(...),
-    severity: str = Form(...),
-    lat: float = Form(...),
-    lng: float = Form(...),
-):
+async def submit_report(body: ReportRequest):
 
-    result = supabase.rpc("nearest_segment", {"lat": lat, "lng": lng}).execute()
+    result = supabase.rpc("nearest_segment", {"lat": body.lat, "lng": body.lng}).execute()
     segment_id = result.data
 
     supabase.table("reports").insert(
-        {"segment_id": segment_id, "condition": condition, "severity": severity, "lat": lat, "lng": lng}
+        {"segment_id": segment_id, "condition": body.condition, "severity": body.severity, "lat": body.lat, "lng": body.lng}
     ).execute()
 
     recalculate_risk_score(segment_id)
