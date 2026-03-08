@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Form
+from fastapi import FastAPI, Form, HTTPException
 from uuid import UUID
 from dotenv import load_dotenv
 from seed import seed
@@ -6,7 +6,9 @@ from pydantic import BaseModel
 from datetime import datetime, timezone
 
 import os
+import math
 import asyncio
+import networkx as nx
 from supabase import create_client, Client
 
 from fastapi.middleware.cors import CORSMiddleware
@@ -117,6 +119,104 @@ async def get_segments():
         features.append(new)
 
     return {"type": "FeatureCollection", "features": features}
+
+
+RISK_MULTIPLIER = 5.0  # risky segment costs up to 6x more than a safe one
+
+
+def _haversine_m(lat1, lon1, lat2, lon2):
+    R = 6_371_000
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    a = math.sin(math.radians(lat2 - lat1) / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(math.radians(lon2 - lon1) / 2) ** 2
+    return 2 * R * math.asin(math.sqrt(a))
+
+
+def _snap(v):
+    return round(v, 5)  # ~1 m precision, snaps adjacent segment endpoints together
+
+
+def _build_graph(features):
+    G = nx.Graph()
+    for feat in features:
+        coords = feat["geometry"]["coordinates"]  # [[lng, lat], ...]
+        risk = feat["properties"].get("risk_score") or 0.0
+
+        u = (_snap(coords[0][0]), _snap(coords[0][1]))   # (lng, lat)
+        v = (_snap(coords[-1][0]), _snap(coords[-1][1]))
+
+        length = sum(
+            _haversine_m(coords[i][1], coords[i][0], coords[i + 1][1], coords[i + 1][0])
+            for i in range(len(coords) - 1)
+        )
+        weight = length * (1 + RISK_MULTIPLIER * risk)
+
+        G.add_edge(u, v, weight=weight, coords=coords, risk_score=risk, length=round(length, 2))
+    return G
+
+
+def _nearest_node(nodes, lat, lng):
+    best, best_d = None, float("inf")
+    for node in nodes:
+        d = _haversine_m(lat, lng, node[1], node[0])
+        if d < best_d:
+            best, best_d = node, d
+    return best
+
+
+@app.get("/route")
+async def get_route(start_lat: float, start_lng: float, end_lat: float, end_lng: float):
+    response = supabase.rpc("get_segments_geojson").execute()
+    features = [
+        {"geometry": row["geometry"], "properties": {"id": row["id"], "risk_score": row["risk_score"]}}
+        for row in response.data
+    ]
+
+    G = _build_graph(features)
+
+    # Use only the largest connected component (the main sidewalk network)
+    largest_component = max(nx.connected_components(G), key=len)
+    G = G.subgraph(largest_component).copy()
+
+    start_node = _nearest_node(G.nodes(), start_lat, start_lng)
+    end_node = _nearest_node(G.nodes(), end_lat, end_lng)
+
+    if start_node == end_node:
+        raise HTTPException(status_code=400, detail="Start and end points are too close or resolve to the same location")
+
+    try:
+        path_nodes = nx.shortest_path(G, start_node, end_node, weight="weight")
+    except nx.NetworkXNoPath:
+        raise HTTPException(status_code=404, detail="No path found between the given coordinates")
+
+    path_features = []
+    merged_coords = []
+
+    for i in range(len(path_nodes) - 1):
+        u, v = path_nodes[i], path_nodes[i + 1]
+        edge = G[u][v]
+        coords = edge["coords"]
+
+        # Ensure coords run u → v (reverse if needed)
+        if not (_snap(coords[0][0]) == u[0] and _snap(coords[0][1]) == u[1]):
+            coords = list(reversed(coords))
+
+        merged_coords.extend(coords if not merged_coords else coords[1:])
+
+        path_features.append({
+            "type": "Feature",
+            "geometry": {"type": "LineString", "coordinates": coords},
+            "properties": {"risk_score": edge["risk_score"], "length_m": edge["length"]},
+        })
+
+    return {
+        "type": "FeatureCollection",
+        "features": path_features,
+        "summary": {
+            "total_length_m": round(sum(f["properties"]["length_m"] for f in path_features), 2),
+            "avg_risk_score": round(sum(f["properties"]["risk_score"] for f in path_features) / len(path_features), 4),
+            "geometry": {"type": "LineString", "coordinates": merged_coords},
+        },
+    }
 
 
 @app.post("/admin/seed")
