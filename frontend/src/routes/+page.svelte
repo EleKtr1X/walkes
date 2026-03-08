@@ -5,6 +5,7 @@
 	import { onDestroy, onMount } from 'svelte';
 	import { PUBLIC_MAPBOX_GL, PUBLIC_SERVER_URL } from '$env/static/public';
 	import type { GeoJSON } from 'geojson';
+	import { SvelteURLSearchParams } from 'svelte/reactivity';
 
 	let { data }: { data: GeoJSON } = $props();
 
@@ -15,9 +16,16 @@
 	let lat = $state(43.4697944);
 	let lng = $state(-80.5537445);
 	let zoom = $state(15);
-	let showOptions = $state(false);
-	let submitted = $state(false);
-	let submitting = $state(false);
+
+	let startInput = $state('');
+	let destInput = $state('');
+	let submittingJourney = $state(false);
+	let lookingAtJourney = $state(false);
+
+	let showReportOptions = $state(false);
+	let submittedReport = $state(false);
+	let submittingReport = $state(false);
+
 	let timer: NodeJS.Timeout | undefined = $state();
 
 	onMount(() => {
@@ -76,6 +84,24 @@
 				}
 			});
 
+			map.addSource('journey', {
+				type: 'geojson',
+				data: {
+					type: 'FeatureCollection',
+					features: [],
+				},
+			});
+
+			map.addLayer({
+				id: 'journey-layer',
+				type: 'line',
+				source: 'journey',
+				paint: {
+					'line-color': '#155dfc',
+					'line-width': 5
+				}
+			});
+
 			timer = setInterval(async () => {
 				const res = await fetch(`${PUBLIC_SERVER_URL}/segments`);
 				const data: GeoJSON = await res.json();
@@ -100,11 +126,11 @@
 	});
 
 	function reportClick() {
-		showOptions = !showOptions;
+		showReportOptions = !showReportOptions;
 	}
 
 	async function reportHazard(condition: string) {
-		submitting = true;
+		submittingReport = true;
 
 		const res = await fetch(`${PUBLIC_SERVER_URL}/report`, {
 			method: 'POST',
@@ -118,16 +144,53 @@
 			})
 		});
 
-		submitting = false;
+		submittingReport = false;
 		if (!res.ok) {
 			alert(`ERROR ${res.status}: ${res.statusText}`);
 		} else {
-			submitted = true;
+			submittedReport = true;
 			setTimeout(() => {
-				submitted = false;
-				showOptions = false;
+				submittedReport = false;
+				showReportOptions = false;
 			}, 5000);
 		}
+	}
+
+	async function showJourney() {
+		submittingJourney = true;
+
+		const params = new SvelteURLSearchParams();
+		params.set('start_lat', '43.432237');
+		params.set('start_lng', '-80.542585');
+		params.set('end_lat', '43.466845');
+		params.set('end_lng', '-80.488357');
+
+		const res = await fetch(`${PUBLIC_SERVER_URL}/route?${params}`);
+
+		const json = await res.json();
+
+		console.log(json);
+
+		const source: GeoJSONSource | undefined = map.getSource('journey');
+		if (source) {
+			source.setData(json);
+		}
+
+		submittingJourney = false;
+		lookingAtJourney = true;
+	}
+
+	function exitJourney() {
+		if (map.style) {
+			const source: GeoJSONSource | undefined = map.getSource('journey');
+			if (source) {
+				source.setData({
+					type: 'FeatureCollection',
+					features: [],
+				});
+			}
+		}
+		lookingAtJourney = false;
 	}
 </script>
 
@@ -140,27 +203,48 @@
 	</div>
 	<div class="flex flex-row items-center gap-2 rounded-t-xl bg-white px-3 pt-2 pb-1 text-lg">
 		<i class="ti ti-current-location"></i>
-		<input type="text" placeholder="Starting point" />
+		<input type="text" bind:value={startInput} placeholder="Starting point" />
 	</div>
 	<div class="flex flex-row items-center gap-2 rounded-b-xl bg-white px-3 pt-1 pb-2 text-lg">
 		<i class="ti ti-map-pin"></i>
-		<input type="text" placeholder="Destination" />
+		<input type="text" bind:value={destInput} placeholder="Destination" />
 	</div>
-	<button
-		class="mt-2 flex cursor-pointer flex-row items-center
-                 justify-center gap-1 rounded-xl bg-blue-600 py-2 text-2xl font-bold text-white hover:brightness-80"
-	>
-		<i class="ti ti-walk"></i>
-		Go!
-	</button>
+	{#if submittingJourney}
+		<button
+			class="mt-2 flex cursor-not-allowed flex-row items-center
+									justify-center gap-1 rounded-xl bg-blue-700 py-2 text-2xl font-bold text-white hover:brightness-80"
+			disabled
+		>
+			<i class="ti ti-loader"></i>
+			Wait...
+		</button>
+	{:else if lookingAtJourney}
+		<button
+				class="mt-2 flex cursor-pointer flex-row items-center
+										justify-center gap-1 rounded-xl bg-blue-600 py-2 text-2xl font-bold text-white hover:brightness-80"
+				onclick={exitJourney}
+			>
+				<i class="ti ti-arrow-left"></i>
+				Back
+			</button>
+	{:else}
+		<button
+			class="mt-2 flex cursor-pointer flex-row items-center
+									justify-center gap-1 rounded-xl bg-blue-600 py-2 text-2xl font-bold text-white hover:brightness-80"
+			onclick={showJourney}
+		>
+			<i class="ti ti-walk"></i>
+			Go!
+		</button>
+	{/if}
 </div>
 
 <div class="absolute right-5 bottom-10 flex flex-col items-end gap-4">
-	{#if showOptions}
+	{#if showReportOptions}
 		<div class="flex flex-row gap-3 rounded-2xl bg-gray-700 p-6">
-			{#if submitted}
+			{#if submittedReport}
 				<span class="text-white">Thank you for contributing!</span>
-			{:else if submitting}
+			{:else if submittingReport}
 				<i class="ti ti-loader text-white"></i>
 			{:else}
 				<div class="flex flex-col items-center justify-center gap-1">
@@ -210,6 +294,7 @@
 			</div>
 		</div>
 	{/if}
+
 
 	<button
 		class="h-16 w-16 cursor-pointer rounded-full bg-blue-600
