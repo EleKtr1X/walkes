@@ -160,10 +160,10 @@
 		submittingJourney = true;
 
 		const params = new SvelteURLSearchParams();
-		params.set('start_lat', '43.432237');
-		params.set('start_lng', '-80.542585');
-		params.set('end_lat', '43.466845');
-		params.set('end_lng', '-80.488357');
+		params.set('start_lat', '43.5154678');
+		params.set('start_lng', '-80.5162927');
+		params.set('end_lat', '43.4694199');
+		params.set('end_lng', '-80.5581401');
 
 		const res = await fetch(`${PUBLIC_SERVER_URL}/route?${params}`);
 
