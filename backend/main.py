@@ -57,7 +57,7 @@ async def submit_report(
 
 @app.get("/segments")
 async def get_segments():
-    response = supabase.rpc("get_segments_geojson").execute()
+    response = supabase.rpc("get_segments_geojson").limit(17500).execute()
     features = []
     for row in response.data:
         new = {
