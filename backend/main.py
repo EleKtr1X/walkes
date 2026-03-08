@@ -1,5 +1,4 @@
-from fastapi import FastAPI, Form, File, UploadFile
-from typing import Optional
+from fastapi import FastAPI, Form
 from uuid import UUID
 from dotenv import load_dotenv
 from seed import seed
@@ -44,14 +43,16 @@ async def submit_report(
     severity: str = Form(...),
     lat: float = Form(...),
     lng: float = Form(...),
-    segment_id: Optional[UUID] = Form(None),
 ):
+
+    result = supabase.rpc("nearest_segment", {"lat": lat, "lng": lng}).execute()
+    segment_id = result.data
+
     supabase.table("reports").insert(
-        {"segment_id": str(segment_id) if segment_id else None, "condition": condition, "severity": severity, "lat": lat, "lng": lng}
+        {"segment_id": segment_id, "condition": condition, "severity": severity, "lat": lat, "lng": lng}
     ).execute()
 
-    if segment_id:
-        recalculate_risk_score(segment_id)
+    recalculate_risk_score(segment_id)
 
 
 @app.get("/segments")
