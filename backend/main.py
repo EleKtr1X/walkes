@@ -3,8 +3,10 @@ from uuid import UUID
 from dotenv import load_dotenv
 from seed import seed
 from pydantic import BaseModel
+from datetime import datetime, timezone
 
 import os
+import asyncio
 from supabase import create_client, Client
 
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,30 +29,62 @@ app.add_middleware(
 )
 
 
-SEVERITY_WEIGHTS = {"low": 1, "medium": 2, "high": 3}
+CONDITION_WEIGHTS = {"puddle": 1, "snow": 2, "crack": 3}
 
 
 def recalculate_risk_score(segment_id: UUID):
     reports = (
         supabase.table("reports")
-        .select("severity")
+        .select("condition")
         .eq("segment_id", str(segment_id))
         .execute()
     ).data
 
     if not reports:
+        supabase.table("segments").update({"risk_score": 0.0}).eq("id", str(segment_id)).execute()
         return
 
-    scores = [SEVERITY_WEIGHTS.get(r["severity"], 1) for r in reports]
+    scores = [CONDITION_WEIGHTS.get(r["condition"], 1) for r in reports]
     risk_score = round(sum(scores) / (len(scores) * 3), 4)  # normalised 0–1
 
     supabase.table("segments").update({"risk_score": risk_score}).eq("id", str(segment_id)).execute()
 
 class ReportRequest(BaseModel):
     condition: str
-    severity: str
     lat: float
     lng: float
+
+
+COOLDOWN_SECONDS = {"snow": 15, "puddle": 30}
+
+async def cooldown_loop():
+    while True:
+        await asyncio.sleep(10)
+        now = datetime.now(timezone.utc)
+
+        reports = (
+            supabase.table("reports")
+            .select("id, condition, created_at, segment_id")
+            .in_("condition", ["snow", "puddle"])
+            .execute()
+        ).data
+
+        affected_segments = set()
+        for report in reports:
+            age = (now - datetime.fromisoformat(report["created_at"])).total_seconds()
+            if age > COOLDOWN_SECONDS[report["condition"]]:
+                supabase.table("reports").delete().eq("id", report["id"]).execute()
+                if report["segment_id"]:
+                    affected_segments.add(report["segment_id"])
+
+        for segment_id in affected_segments:
+            recalculate_risk_score(segment_id)
+
+
+@app.on_event("startup")
+async def start_cooldown_loop():
+    asyncio.create_task(cooldown_loop())
+
 
 @app.post("/report")
 async def submit_report(body: ReportRequest):
@@ -59,7 +93,7 @@ async def submit_report(body: ReportRequest):
     segment_id = result.data
 
     supabase.table("reports").insert(
-        {"segment_id": segment_id, "condition": body.condition, "severity": body.severity, "lat": body.lat, "lng": body.lng}
+        {"segment_id": segment_id, "condition": body.condition, "lat": body.lat, "lng": body.lng}
     ).execute()
 
     recalculate_risk_score(segment_id)
@@ -67,9 +101,10 @@ async def submit_report(body: ReportRequest):
 
 @app.get("/segments")
 async def get_segments():
-    response = supabase.rpc("get_segments_geojson").limit(17500).execute()
+    response = supabase.rpc("get_segments_geojson").execute()
+    # print([r for r in response.data if r.get("risk_score", 0) > 0][:5])
     features = []
-    for row in response.data:
+    for row in response.data: 
         new = {
             "type": "Feature",
             "geometry": row["geometry"],
