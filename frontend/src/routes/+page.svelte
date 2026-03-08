@@ -1,11 +1,10 @@
 <script lang="ts">
-  import mbgl from 'mapbox-gl';
+  import mbgl, { type GeoJSONSource } from 'mapbox-gl';
   const { Map, GeolocateControl } = mbgl;
   import 'mapbox-gl/dist/mapbox-gl.css';
 	import { onDestroy, onMount } from 'svelte';
   import { PUBLIC_MAPBOX_GL } from '$env/static/public';
   import type { GeoJSON } from 'geojson';
-	import type { GeoJSONSource } from 'mapbox-gl';
 
   let { data }: { data: GeoJSON } = $props();
 
@@ -17,6 +16,7 @@
   let lng = $state(-80.5537445);
   let zoom = $state(15);
   let showOptions = $state(false);
+  let timer: NodeJS.Timeout | undefined = $state();
 
   onMount(() => {
     map = new Map({
@@ -38,6 +38,10 @@
     map.addControl(geo);
 
     map.on('load', async () => {
+      if (timer) {
+        clearInterval(timer);
+      }
+
       geo.trigger();
 
       map.addSource('segments', {
@@ -60,7 +64,7 @@
         }
       });
 
-      setInterval(async () => {
+      timer = setInterval(async () => {
         const res = await fetch('http://localhost:8000/segments');
         const data: GeoJSON = await res.json();
 
@@ -73,6 +77,9 @@
   onDestroy(() => {
     if (map) {
       map.remove();
+    }
+    if (timer) {
+      clearInterval(timer);
     }
   });
 
@@ -102,6 +109,11 @@
 </script>
 
 <div class="absolute w-full h-full" bind:this={mapContainer}></div>
+
+<div class="flex flex-col absolute top-5 left-5">
+  <input class="bg-white p-3 rounded-t-xl" type="text" placeholder="🔵 Starting point"/>
+  <input class="bg-white p-3 rounded-b-xl" type="text" placeholder="📍 Destination"/>
+</div>
 
 <div class="flex flex-col absolute right-10 bottom-10 gap-2 items-end">
   {#if showOptions}
