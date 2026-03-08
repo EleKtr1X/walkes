@@ -166,7 +166,8 @@
 				<div class="flex flex-col items-center justify-center gap-1">
 					<button
 						class="bottom-10 h-16 w-16 cursor-pointer rounded-full
-                        bg-white text-2xl font-bold text-white hover:brightness-80"
+                        bg-white text-2xl font-bold text-white hover:brightness-80
+												flex justify-center items-center"
 						onclick={() => reportHazard('snow')}
 						title="Snow/Ice"
 					>
@@ -177,7 +178,8 @@
 				<div class="flex flex-col items-center justify-center gap-1">
 					<button
 						class="bottom-10 h-16 w-16 cursor-pointer rounded-full
-                        bg-blue-600 text-2xl font-bold text-white hover:brightness-80"
+                        bg-blue-600 text-2xl font-bold text-white hover:brightness-80
+												flex justify-center items-center"
 						onclick={() => reportHazard('puddle')}
 						title="Puddle"
 					>
@@ -188,7 +190,8 @@
 				<div class="flex flex-col items-center justify-center gap-1">
 					<button
 						class="bottom-10 h-16 w-16 cursor-pointer rounded-full
-                        bg-red-600 text-2xl font-bold text-white hover:brightness-80"
+                        bg-red-600 text-2xl font-bold text-white hover:brightness-80
+												flex justify-center items-center"
 						onclick={() => reportHazard('crack')}
 						title="Crack"
 					>
@@ -210,7 +213,8 @@
 
 	<button
 		class="h-16 w-16 cursor-pointer rounded-full bg-blue-600
-                text-2xl font-bold text-white hover:brightness-80"
+                text-2xl font-bold text-white hover:brightness-80
+								flex justify-center items-center"
 		onclick={reportClick}
 		title="Report"
 	>
