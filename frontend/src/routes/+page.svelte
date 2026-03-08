@@ -16,6 +16,8 @@
   let lng = $state(-80.5537445);
   let zoom = $state(15);
   let showOptions = $state(false);
+  let submitted = $state(false);
+  let submitting = $state(false);
   let timer: NodeJS.Timeout | undefined = $state();
 
   onMount(() => {
@@ -44,6 +46,11 @@
 
       geo.trigger();
 
+      geo.on('geolocate', ({ coords }) => {
+        lat = coords.latitude;
+        lng = coords.longitude;
+      });
+
       map.addSource('segments', {
         type: 'geojson',
         data: data,
@@ -68,10 +75,15 @@
         const res = await fetch('http://localhost:8000/segments');
         const data: GeoJSON = await res.json();
 
-        const source: GeoJSONSource = map.getSource('segments')!;
-        source.setData(data);
-      }, 5000)
+        if (map.style) {
+          const source: GeoJSONSource | undefined = map.getSource('segments');
+          if (source) {
+            source.setData(data);
+          }
+        }
+      }, 10000)
     });
+
   });
 
   onDestroy(() => {
@@ -88,6 +100,8 @@
   }
 
   async function reportHazard(condition: string) {
+    submitting = true;
+
     const res = await fetch('http://localhost:8000/report', {
       method: 'POST',
       headers: {
@@ -95,15 +109,20 @@
       },
       body: JSON.stringify({
         condition,
-        severity: 'medium',
         lat,
         lng,
       }),
     });
 
-
+    submitting = false;
     if (!res.ok) {
       alert(`ERROR ${res.status}: ${res.statusText}`);
+    } else {
+      submitted = true;
+      setTimeout(() => {
+        submitted = false;
+        showOptions = false;
+      }, 5000);
     }
   }
 </script>
@@ -111,33 +130,61 @@
 <div class="absolute w-full h-full" bind:this={mapContainer}></div>
 
 <div class="flex flex-col absolute top-5 left-5">
-  <input class="bg-white p-3 rounded-t-xl" type="text" placeholder="🔵 Starting point"/>
-  <input class="bg-white p-3 rounded-b-xl" type="text" placeholder="📍 Destination"/>
+  <div class="flex flex-row items-center gap-1 font-bold text-white text-3xl mb-2">
+    <i class="ti ti-walk"></i>
+    <span>Walkes</span>
+  </div>
+  <div class="flex flex-row bg-white px-3 pt-2 pb-1 rounded-t-xl gap-2 items-center text-lg">
+    <i class="ti ti-current-location"></i>
+    <input type="text" placeholder="Starting point"/>
+  </div>
+  <div class="flex flex-row bg-white px-3 pb-2 pt-1 rounded-b-xl gap-2 items-center text-lg">
+    <i class="ti ti-map-pin"></i>
+    <input type="text" placeholder="Destination"/>
+  </div>
   <button class="bg-blue-600 text-white font-bold text-2xl cursor-pointer
-                 rounded-xl mt-2 py-2 hover:brightness-80">Go!</button>
+                 rounded-xl mt-2 py-2 hover:brightness-80 flex flex-row gap-1 items-center justify-center">
+    <i class="ti ti-walk"></i>
+    Go!
+  </button>
 </div>
 
-<div class="flex flex-col absolute right-10 bottom-10 gap-4 items-end">
+<div class="flex flex-col absolute right-5 bottom-10 gap-4 items-end">
   {#if showOptions}
-    <div class="bg-gray-700 p-6 rounded-2xl flex flex-row gap-3">
+  <div class="bg-gray-700 p-6 rounded-2xl flex flex-row gap-3">
+    {#if submitted}
+      <span class="text-white">Thank you for contributing!</span>
+    {:else if submitting}
+      <i class="ti ti-loader text-white"></i>
+    {:else}
       <div class="flex flex-col justify-center gap-1 items-center">
-        <button class="rounded-full bg-white text-white text-2xl font-bold
-                      bottom-10 w-16 h-16 cursor-pointer hover:brightness-80"
-                      onclick={() => reportHazard('snow')}>❄️</button>
-        <span class="text-white">Snow/Ice</span>
-      </div>
-      <div class="flex flex-col justify-center gap-1 items-center">
-        <button class="rounded-full bg-blue-600 text-white text-2xl font-bold
-                      bottom-10 w-16 h-16 cursor-pointer hover:brightness-80"
-                      onclick={() => reportHazard('puddle')}>💧</button>
-        <span class="text-white">Puddle</span>
-      </div>
-      <div class="flex flex-col justify-center gap-1 items-center">
-        <button class="rounded-full bg-red-600 text-white text-2xl font-bold
-                      bottom-10 w-16 h-16 cursor-pointer hover:brightness-80"
-                      onclick={() => reportHazard('crack')}>⚠️</button>
-        <span class="text-white">Crack</span>
-      </div>
+          <button class="rounded-full bg-white text-white text-2xl font-bold
+                        bottom-10 w-16 h-16 cursor-pointer hover:brightness-80"
+                        onclick={() => reportHazard('snow')}
+                        title="Snow/Ice">
+            <i class="ti ti-snowflake text-black"></i>
+          </button>
+          <span class="text-white">Snow/Ice</span>
+        </div>
+        <div class="flex flex-col justify-center gap-1 items-center">
+          <button class="rounded-full bg-blue-600 text-white text-2xl font-bold
+                        bottom-10 w-16 h-16 cursor-pointer hover:brightness-80"
+                        onclick={() => reportHazard('puddle')}
+                        title="Puddle">
+            <i class="ti ti-droplet"></i>
+          </button>
+          <span class="text-white">Puddle</span>
+        </div>
+        <div class="flex flex-col justify-center gap-1 items-center">
+          <button class="rounded-full bg-red-600 text-white text-2xl font-bold
+                        bottom-10 w-16 h-16 cursor-pointer hover:brightness-80"
+                        onclick={() => reportHazard('crack')}
+                        title="Crack">
+            <i class="ti ti-alert-triangle"></i>
+          </button>
+          <span class="text-white">Crack</span>
+        </div>
+        {/if}
       <div class="absolute bottom-16 right-6">
         <div class="w-0 h-0 -border-l-2 border-l-transparent
                             -border-r-2 border-r-transparent
@@ -149,5 +196,7 @@
 
   <button class="rounded-full bg-blue-600 text-white text-2xl font-bold
                 w-16 h-16 cursor-pointer hover:brightness-80"
-                onclick={reportClick}>!</button>
+                onclick={reportClick} title="Report">
+    <i class="ti ti-alert-triangle"></i>
+  </button>
 </div>
