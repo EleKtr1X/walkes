@@ -15,6 +15,7 @@
   let lat = $state(43.4697944);
   let lng = $state(-80.5537445);
   let zoom = $state(15);
+  let showOptions = $state(false);
 
   onMount(() => {
     map = new Map({
@@ -66,8 +67,25 @@
       map.remove();
     }
   });
+
+  function reportClick() {
+    showOptions = !showOptions;
+  }
 </script>
 
 <div class="absolute w-full h-full" bind:this={mapContainer}></div>
-<button class="rounded-full bg-blue-600 text-white text-2xl font-bold
-               absolute right-10 bottom-10 w-16 h-16 cursor-pointer">!</button>
+
+<div class="flex flex-col absolute right-10 bottom-10 gap-2 items-end">
+  {#if showOptions}
+    <div class="bg-gray-600 p-6 rounded-2xl">
+      <div class="flex flex-col justify-center gap-1">
+        <button class="rounded-full bg-blue-600 text-white text-2xl font-bold
+                      bottom-10 w-16 h-16 cursor-pointer">❄️</button>
+        <span class="text-white">Snow/Ice</span>
+      </div>
+    </div>
+  {/if}
+
+  <button class="rounded-full bg-blue-600 text-white text-2xl font-bold
+                w-16 h-16 cursor-pointer" onclick={reportClick}>!</button>
+</div>
