@@ -5,6 +5,7 @@
 	import { onDestroy, onMount } from 'svelte';
   import { PUBLIC_MAPBOX_GL } from '$env/static/public';
   import type { GeoJSON } from 'geojson';
+	import type { GeoJSONSource } from 'mapbox-gl';
 
   let { data }: { data: GeoJSON } = $props();
 
@@ -15,6 +16,7 @@
   let lat = $state(43.4697944);
   let lng = $state(-80.5537445);
   let zoom = $state(15);
+  let showOptions = $state(false);
 
   onMount(() => {
     map = new Map({
@@ -58,6 +60,13 @@
         }
       });
 
+      setInterval(async () => {
+        const res = await fetch('http://localhost:8000/segments');
+        const data: GeoJSON = await res.json();
+
+        const source: GeoJSONSource = map.getSource('segments')!;
+        source.setData(data);
+      }, 5000)
     });
   });
 
@@ -66,8 +75,58 @@
       map.remove();
     }
   });
+
+  function reportClick() {
+    showOptions = !showOptions;
+  }
+
+  async function reportHazard(condition: string) {
+    const res = await fetch('http://localhost:8000/report', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        condition,
+        severity: 'medium',
+        lat,
+        lng,
+      }),
+    });
+
+
+    if (!res.ok) {
+      alert(`ERROR ${res.status}: ${res.statusText}`);
+    }
+  }
 </script>
 
 <div class="absolute w-full h-full" bind:this={mapContainer}></div>
-<button class="rounded-full bg-blue-600 text-white text-2xl font-bold
-               absolute right-10 bottom-10 w-16 h-16 cursor-pointer">!</button>
+
+<div class="flex flex-col absolute right-10 bottom-10 gap-2 items-end">
+  {#if showOptions}
+    <div class="bg-gray-600 p-6 rounded-2xl flex flex-row gap-3">
+      <div class="flex flex-col justify-center gap-1 items-center">
+        <button class="rounded-full bg-white text-white text-2xl font-bold
+                      bottom-10 w-16 h-16 cursor-pointer"
+                      onclick={() => reportHazard('snow')}>❄️</button>
+        <span class="text-white">Snow/Ice</span>
+      </div>
+      <div class="flex flex-col justify-center gap-1 items-center">
+        <button class="rounded-full bg-blue-600 text-white text-2xl font-bold
+                      bottom-10 w-16 h-16 cursor-pointer"
+                      onclick={() => reportHazard('puddle')}>💧</button>
+        <span class="text-white">Puddle</span>
+      </div>
+      <div class="flex flex-col justify-center gap-1 items-center">
+        <button class="rounded-full bg-red-600 text-white text-2xl font-bold
+                      bottom-10 w-16 h-16 cursor-pointer"
+                      onclick={() => reportHazard('crack')}>⚠️</button>
+        <span class="text-white">Crack</span>
+      </div>
+    </div>
+  {/if}
+
+  <button class="rounded-full bg-blue-600 text-white text-2xl font-bold
+                w-16 h-16 cursor-pointer" onclick={reportClick}>!</button>
+</div>
