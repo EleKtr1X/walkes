@@ -102,7 +102,6 @@ async def submit_report(body: ReportRequest):
 @app.get("/segments")
 async def get_segments():
     response = supabase.rpc("get_segments_geojson").execute()
-    # print([r for r in response.data if r.get("risk_score", 0) > 0][:5])
     features = []
     for row in response.data: 
         new = {
