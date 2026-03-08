@@ -3,7 +3,7 @@
 	const { Map, GeolocateControl } = mbgl;
 	import 'mapbox-gl/dist/mapbox-gl.css';
 	import { onDestroy, onMount } from 'svelte';
-	import { PUBLIC_MAPBOX_GL } from '$env/static/public';
+	import { PUBLIC_MAPBOX_GL, PUBLIC_SERVER_URL } from '$env/static/public';
 	import type { GeoJSON } from 'geojson';
 
 	let { data }: { data: GeoJSON } = $props();
@@ -77,7 +77,7 @@
 			});
 
 			timer = setInterval(async () => {
-				const res = await fetch('https://walkes-backend.vercel.app/segments');
+				const res = await fetch(`${PUBLIC_SERVER_URL}/segments`);
 				const data: GeoJSON = await res.json();
 
 				if (map.style) {
@@ -106,7 +106,7 @@
 	async function reportHazard(condition: string) {
 		submitting = true;
 
-		const res = await fetch('https://walkes-backend.vercel.app/report', {
+		const res = await fetch(`${PUBLIC_SERVER_URL}/report`, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json'
